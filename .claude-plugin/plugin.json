@@ -1,0 +1,16 @@
+{
+  "name": "michimem",
+  "version": "0.1.0",
+  "description": "Next-gen memory system for personal AI agents — tiered loading, compaction survival, memory compounding",
+  "author": {
+    "name": "xiaowei.wan"
+  },
+  "license": "MIT",
+  "keywords": ["memory", "agent", "mcp", "context"],
+  "mcpServers": {
+    "michimem": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/src/index.js"]
+    }
+  }
+}
