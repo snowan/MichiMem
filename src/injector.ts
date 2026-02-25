@@ -1,36 +1,33 @@
 import { IndexDB } from "../mcp/src/services/index-db.js";
+import { buildL0 } from "../mcp/src/services/tiering.js";
 import type { CheckpointData, MichiMemConfig } from "./types.js";
 
 export function buildL0Context(config: MichiMemConfig): string {
   const db = new IndexDB(config.data_dir);
   try {
+    const items = buildL0(db, config);
+    if (items.length === 0) return "";
+
+    const knowledgeItems = items.filter((i) => i.priority === 0);
+    const insightItems = items.filter((i) => i.type === "insight");
+    const sharedItems = items.filter((i) => i.type === "shared");
+
     const lines: string[] = [];
 
-    const knowledge = db.getByPriority(0, 10);
-    if (knowledge.length > 0) {
+    if (knowledgeItems.length > 0) {
       lines.push("## Core Knowledge");
-      for (const m of knowledge) {
-        lines.push(`- ${m.title}: ${m.summary}`);
-      }
+      for (const i of knowledgeItems) lines.push(`- ${i.text}`);
     }
 
-    const insights = db.getByType("insight", 5);
-    if (insights.length > 0) {
+    if (insightItems.length > 0) {
       lines.push("## Recent Insights");
-      for (const m of insights) {
-        lines.push(`- ${m.title}: ${m.summary}`);
-      }
+      for (const i of insightItems) lines.push(`- ${i.text}`);
     }
 
-    const shared = db.getByType("shared", 3);
-    if (shared.length > 0) {
+    if (sharedItems.length > 0) {
       lines.push("## Shared Memories");
-      for (const m of shared) {
-        lines.push(`- ${m.title}: ${m.summary}`);
-      }
+      for (const i of sharedItems) lines.push(`- ${i.text}`);
     }
-
-    if (lines.length === 0) return "";
 
     return [
       "<michimem-context>",
