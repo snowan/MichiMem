@@ -1,7 +1,10 @@
 import { loadConfig, ensureDataDirs } from "../src/config.js";
 import { createCheckpoint, getLatestCheckpoint } from "../src/checkpoint.js";
+import { extractFromTranscript } from "../src/extractor.js";
 import { buildL0Context, buildRestoreContext } from "../src/injector.js";
 import { IndexDB } from "../mcp/src/services/index-db.js";
+import { runCompounding } from "../mcp/src/services/compounding.js";
+import { runLifecycle } from "../mcp/src/services/lifecycle.js";
 
 interface HookInput {
   session_id: string;
@@ -120,10 +123,33 @@ function handleStop(
     return;
   }
 
+  const extracted = extractFromTranscript(input.transcript_path, config);
+
   const db = new IndexDB(config.data_dir);
   try {
-    db.recordMetric("stop", {
+    if (extracted.diary) {
+      db.insert(extracted.diary);
+    }
+
+    for (const correction of extracted.corrections) {
+      const existing = db.search(correction.title, 1);
+      if (existing.length === 0) {
+        db.insert(correction);
+      }
+    }
+
+    for (const pref of extracted.preferences) {
+      const existing = db.search(pref.title, 1);
+      if (existing.length === 0) {
+        db.insert(pref);
+      }
+    }
+
+    db.recordMetric("stop_extract", {
       session_id: input.session_id,
+      diary: extracted.diary !== null,
+      corrections: extracted.corrections.length,
+      preferences: extracted.preferences.length,
     });
   } finally {
     db.close();
@@ -138,16 +164,15 @@ function handleSessionEnd(
 ) {
   const db = new IndexDB(config.data_dir);
   try {
+    const compoundResult = runCompounding(db, config);
+    const lifecycleResult = runLifecycle(db, config);
+
     db.recordMetric("session_end", {
       session_id: input.session_id,
       reason: input.reason,
+      compounding: compoundResult,
+      lifecycle: lifecycleResult,
     });
-
-    const expired = db.getExpired();
-    for (const mem of expired) {
-      db.delete(mem.id);
-      db.recordMetric("expired", { id: mem.id, type: mem.type });
-    }
   } finally {
     db.close();
   }
@@ -155,4 +180,7 @@ function handleSessionEnd(
   process.exit(0);
 }
 
-main().catch(() => process.exit(1));
+main().catch((err) => {
+  process.stderr.write(`MichiMem hook error: ${err?.message ?? err}\n`);
+  process.exit(1);
+});

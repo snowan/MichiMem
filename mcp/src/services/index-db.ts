@@ -119,6 +119,9 @@ export class IndexDB {
   }
 
   search(query: string, limit = 10): SearchResult[] {
+    const sanitized = sanitizeFtsQuery(query);
+    if (!sanitized) return [];
+
     const rows = this.db
       .prepare(
         `SELECT m.*, rank
@@ -128,7 +131,7 @@ export class IndexDB {
        ORDER BY rank
        LIMIT ?`,
       )
-      .all(query, limit) as Array<Record<string, unknown>>;
+      .all(sanitized, limit) as Array<Record<string, unknown>>;
 
     return rows.map((row) => ({
       memory: this.rowToMemory(row),
@@ -281,4 +284,15 @@ export class IndexDB {
       expires_at: (row.expires_at as string) || null,
     };
   }
+}
+
+function sanitizeFtsQuery(query: string): string {
+  const words = query
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1);
+
+  if (words.length === 0) return "";
+
+  return words.map((w) => `"${w}"`).join(" ");
 }
